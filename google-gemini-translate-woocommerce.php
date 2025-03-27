@@ -45,7 +45,6 @@ class GoogleGeminiTranslate {
         add_action('init', [$this, 'schedule_translation_cron']);
         add_action('translate_products_batch', [$this, 'process_translation_batch']);
         add_filter('cron_schedules', [$this,'ggt_cron_schedules']);
-
     }
     /**
      * Adds the plugin settings page to the WordPress Admin menu.
@@ -88,6 +87,12 @@ class GoogleGeminiTranslate {
                     if ($last_schedule_time) {
                         echo '<p>Last schedule: ' . date('Y-m-d H:i:s', $last_schedule_time) . '</p>';
                     }
+                    $error_message = get_option('gemini_translate_error');
+                    if ($error_message) {
+                        add_action('admin_notices', function () use ($error_message) {
+                            echo '<div class="notice notice-error"><p>Error: ' . esc_html($error_message) . '</p></div>';
+                        });
+                    }
                 ?>
             </form>
         </div>
@@ -99,6 +104,13 @@ class GoogleGeminiTranslate {
      * @since 1.0.0
      */
     public function register_settings() {
+        
+        if(isset($_POST) && !empty($_POST)){
+            if( 'Test Api key' === $this->translate_text('Test Api key')){
+                add_settings_error('ggt_settings_group', 'invalid_api_key', __('Invalid Gemini API key', 'ggt'), 'error');
+            }
+        }
+        
         register_setting('ggt_settings_group', 'ggt_api_key');
         register_setting('ggt_settings_group', 'ggt_target_language');
 
@@ -124,7 +136,6 @@ class GoogleGeminiTranslate {
             'ggt-settings',
             'ggt_main_section'
         );
-
     }
     /**
      * Outputs the input field for the Google Gemini API Key.
@@ -216,6 +227,19 @@ class GoogleGeminiTranslate {
 
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        if(isset($data['error']) ){
+            update_option('gemini_translate_error', $data['error']['message']);
+            add_action('admin_notices', function() use ($data) {
+                echo '<div class="notice notice-error is-dismissible">';
+                echo '<p>' . esc_html($data['error']['message']) . '</p>';
+                echo '</div>';
+            });
+            return $text; // Return
+        }
+
+        if(get_option('gemini_translate_error')) {
+            delete_option('gemini_translate_error');
+        }
         
         // Extract the first response text if multiple options exist
         if (!empty($data['candidates'][0]['content']['parts'][0]['text'])) {
@@ -310,7 +334,6 @@ class GoogleGeminiTranslate {
             $post_id = $product->ID;
             $original_title = get_the_title($post_id);
             $translated_title = $this->translate($original_title);
-
             wp_update_post([
                 'ID'         => $post_id,
                 'post_title' => $translated_title,
