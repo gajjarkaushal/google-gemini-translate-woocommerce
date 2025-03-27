@@ -321,6 +321,10 @@ class GoogleGeminiTranslate {
                     'key'     => '_translated_gemini',
                     'compare' => 'NOT EXISTS',
                 ],
+                [
+                    'key'     => '_telforceid',
+                    'compare' => 'EXISTS',
+                ],
             ],
         ];
 
