@@ -79,22 +79,41 @@ class GoogleGeminiTranslate {
                 submit_button();
                 ?>
             </form>
+            <hr>
+            <h2><?php _e('Google Translate Report', 'ggt'); ?></h2>
+
             <form method="post">
                 <input type="hidden" name="start_translation" value="1">
                 <button type="submit" class="button button-primary"><?php _e('Start Translation Schedule', 'ggt'); ?></button>
-                <?php
+            </form>
+            <br>
+            <table class="widefat striped">
+                <thead>
+                    <tr>
+                        <th><?php _e('Report Item', 'ggt'); ?></th>
+                        <th><?php _e('Details', 'ggt'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
                     $last_schedule_time = get_option('translate_products_batch_time');
                     if ($last_schedule_time) {
-                        echo '<p>Last schedule: ' . date('Y-m-d H:i:s', $last_schedule_time) . '</p>';
+                        echo '<tr><td><b>' . __('Last Schedule', 'ggt') . '</b></td><td>' . date('Y-m-d H:i:s', $last_schedule_time) . '</td></tr>';
+                    } else {
+                        echo '<tr><td><b>' . __('Last Schedule', 'ggt') . '</b></td><td>' . __('No schedule available', 'ggt') . '</td></tr>';
                     }
+
                     $error_message = get_option('gemini_translate_error');
                     if ($error_message) {
-                        add_action('admin_notices', function () use ($error_message) {
-                            echo '<div class="notice notice-error"><p>Error: ' . esc_html($error_message) . '</p></div>';
-                        });
+                        echo '<tr><td style="color:red;"><b>' . __('Last Error', 'ggt') . '</b></td><td style="color:red;">' . esc_html($error_message) . '</td></tr>';
                     }
-                ?>
-            </form>
+
+                    $no_of_translate = get_option('gemini_translate_string_count', 0);
+                    echo '<tr><td><b>' . __('Number of Translations', 'ggt') . '</b></td><td>' . intval($no_of_translate) . '</td></tr>';
+                    ?>
+                </tbody>
+            </table>
+
         </div>
         <?php
     }
@@ -105,11 +124,12 @@ class GoogleGeminiTranslate {
      */
     public function register_settings() {
         
-        if(isset($_POST) && !empty($_POST)){
-            if( 'Test Api key' === $this->translate_text('Test Api key')){
-                add_settings_error('ggt_settings_group', 'invalid_api_key', __('Invalid Gemini API key', 'ggt'), 'error');
-            }
-        }
+        // if(isset($_POST) && !empty($_POST)){
+
+        //     if( 'Test Api key' === $this->translate_text('Test Api key')){
+        //         add_settings_error('ggt_settings_group', 'invalid_api_key', __('Invalid Gemini API key', 'ggt'), 'error');
+        //     }
+        // }
         
         register_setting('ggt_settings_group', 'ggt_api_key');
         register_setting('ggt_settings_group', 'ggt_target_language');
@@ -191,7 +211,8 @@ class GoogleGeminiTranslate {
         if (!$this->api_key) { 
             return $text;
         }
-
+        sleep(2);
+        $translate_count = get_option('gemini_translate_string_count',0);
         $target_language = get_option('ggt_target_language', 'sv'); // Default to Swedish
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $this->api_key;
         
@@ -228,18 +249,13 @@ class GoogleGeminiTranslate {
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
         if(isset($data['error']) ){
-            update_option('gemini_translate_error', $data['error']['message']);
-            add_action('admin_notices', function() use ($data) {
-                echo '<div class="notice notice-error is-dismissible">';
-                echo '<p>' . esc_html($data['error']['message']) . '</p>';
-                echo '</div>';
-            });
+            update_option('gemini_translate_error', $data['error']['message'] ."<br> Error text: $text");
             return $text; // Return
         }
+        $translate_count++;
+        update_option('gemini_translate_string_count',$translate_count);
 
-        if(get_option('gemini_translate_error')) {
-            delete_option('gemini_translate_error');
-        }
+        update_option('gemini_translate_error','');
         
         // Extract the first response text if multiple options exist
         if (!empty($data['candidates'][0]['content']['parts'][0]['text'])) {
