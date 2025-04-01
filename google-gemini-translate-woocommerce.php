@@ -45,6 +45,10 @@ class GoogleGeminiTranslate {
         add_action('init', [$this, 'schedule_translation_cron']);
         add_action('translate_products_batch', [$this, 'process_translation_batch']);
         add_filter('cron_schedules', [$this,'ggt_cron_schedules']);
+        // add_action('init', function(){
+        //     echo $this->translate('Hey, How was your morning?');
+        //     die;
+        // });
     }
     /**
      * Adds the plugin settings page to the WordPress Admin menu.
@@ -108,7 +112,7 @@ class GoogleGeminiTranslate {
                         echo '<tr><td style="color:red;"><b>' . __('Last Error', 'ggt') . '</b></td><td style="color:red;">' . esc_html($error_message) . '</td></tr>';
                     }
 
-                    $no_of_translate = get_option('gemini_translate_string_count', 0);
+                    $no_of_translate = get_option('translate_string_count', 0);
                     echo '<tr><td><b>' . __('Number of Translations', 'ggt') . '</b></td><td>' . intval($no_of_translate) . '</td></tr>';
                     ?>
                 </tbody>
@@ -207,71 +211,133 @@ class GoogleGeminiTranslate {
      * @param string $text The text to translate
      * @return string The translated text or the original text if translation fails
      */
+    // private function translate_text($text) {
+    //     if (!$this->api_key) { 
+    //         return $text;
+    //     }
+    //     sleep(2);
+    //     $translate_count = get_option('translate_string_count',0);
+    //     $target_language = get_option('ggt_target_language', 'sv'); // Default to Swedish
+    //     $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $this->api_key;
+        
+    //     $body = json_encode([
+    //         'contents' => [
+    //             [
+    //                 'role'  => 'user',
+    //                 'parts' => [
+    //                     ['text' => "translate en to {$target_language}\n\n{$text}\n"]
+    //                 ]
+    //             ]
+    //         ],
+    //         'generationConfig' => [
+    //             'temperature'       => 1,
+    //             'topK'             => 40,
+    //             'topP'             => 0.95,
+    //             'maxOutputTokens'   => 8192,
+    //             'responseMimeType'  => 'text/plain'
+    //         ]
+    //     ]);
+
+    //     $response = wp_remote_post($url, [
+    //         'method'    => 'POST',
+    //         'body'      => $body,
+    //         'headers'   => [
+    //             'Content-Type' => 'application/json'
+    //         ]
+    //     ]);
+
+    //     if (is_wp_error($response)) {
+    //         return $text; // Return original text if request fails
+    //     }
+
+    //     $body = wp_remote_retrieve_body($response);
+    //     $data = json_decode($body, true);
+    //     if(isset($data['error']) ){
+    //         update_option('gemini_translate_error', $data['error']['message'] ."<br> Error text: $text");
+    //         return $text; // Return
+    //     }
+    //     $translate_count++;
+    //     update_option('translate_string_count',$translate_count);
+
+    //     update_option('gemini_translate_error','');
+        
+    //     // Extract the first response text if multiple options exist
+    //     if (!empty($data['candidates'][0]['content']['parts'][0]['text'])) {
+    //         $translated_text = $data['candidates'][0]['content']['parts'][0]['text'];
+
+    //         // Pick the first **bold** option if available
+    //         preg_match('/\*\*([^*]+)\*\*/', $translated_text, $matches);
+    //         if (!empty($matches[1])) {
+    //             return trim($matches[1]); // Return first bolded translation
+    //         }
+
+    //         return trim($translated_text); // Return as is if no formatting
+    //     }
+
+    //     return $text;
+    // }
     private function translate_text($text) {
-        if (!$this->api_key) { 
+        if (empty($this->api_key)) { 
             return $text;
         }
-        sleep(2);
-        $translate_count = get_option('gemini_translate_string_count',0);
+    
+        $translate_count = get_option('translate_string_count', 0);
         $target_language = get_option('ggt_target_language', 'sv'); // Default to Swedish
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $this->api_key;
-        
+        $url = 'https://api.deepseek.com/chat/completions';
+    
         $body = json_encode([
-            'contents' => [
-                [
-                    'role'  => 'user',
-                    'parts' => [
-                        ['text' => "translate en to {$target_language}\n\n{$text}\n"]
-                    ]
-                ]
+            'model' => 'deepseek-chat',
+            'messages' => [
+                ['role' => 'user', 'content' => "Translate this to {$target_language}: {$text}"]
             ],
-            'generationConfig' => [
-                'temperature'       => 1,
-                'topK'             => 40,
-                'topP'             => 0.95,
-                'maxOutputTokens'   => 8192,
-                'responseMimeType'  => 'text/plain'
-            ]
+            'temperature' => 1.3,
+            'stream' => false
         ]);
-
+    
         $response = wp_remote_post($url, [
-            'method'    => 'POST',
-            'body'      => $body,
-            'headers'   => [
-                'Content-Type' => 'application/json'
-            ]
+            'method'  => 'POST',
+            'body'    => $body,
+            'headers' => [
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $this->api_key
+            ],
+            'timeout' => 20 // Increase timeout to 20 seconds
         ]);
-
+    
         if (is_wp_error($response)) {
-            return $text; // Return original text if request fails
+            update_option('deepseek_translate_error', 'Request failed: ' . $response->get_error_message());
+            return $text;
         }
-
+    
         $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-        if(isset($data['error']) ){
-            update_option('gemini_translate_error', $data['error']['message'] ."<br> Error text: $text");
-            return $text; // Return
-        }
-        $translate_count++;
-        update_option('gemini_translate_string_count',$translate_count);
-
-        update_option('gemini_translate_error','');
         
-        // Extract the first response text if multiple options exist
-        if (!empty($data['candidates'][0]['content']['parts'][0]['text'])) {
-            $translated_text = $data['candidates'][0]['content']['parts'][0]['text'];
-
-            // Pick the first **bold** option if available
-            preg_match('/\*\*([^*]+)\*\*/', $translated_text, $matches);
-            if (!empty($matches[1])) {
-                return trim($matches[1]); // Return first bolded translation
-            }
-
-            return trim($translated_text); // Return as is if no formatting
+        if (!$body) {
+            update_option('deepseek_translate_error', 'Empty response from API.');
+            return $text;
         }
-
+    
+        $data = json_decode($body, true);
+        if (isset($data['error'])) {
+            update_option('deepseek_translate_error', $data['error']['message'] . " | Error text: $text");
+            return $text;
+        }
+        $translated_text = $data['choices'][0]['message']['content'] ?? '';
+        $translated_text = $this->extract_translation($translated_text);
+        if ($translated_text) {
+            $translated_text = trim($translated_text, "\"“”");
+            update_option('translate_string_count', ++$translate_count);
+            update_option('deepseek_translate_error', '');
+            return $translated_text;
+        }
+    
         return $text;
     }
+    function extract_translation($response_text) {
+        preg_match('/\*\*(.*?)\*\*/', $response_text, $matches);
+        $response_text = preg_replace('/[\r\n*].*/', '', trim($response_text));
+        return $matches[1] ?? $response_text; // Return extracted text or full response if no match
+    }
+    
     public function translate($text) {
         return $this->translate_text($text);
     }
