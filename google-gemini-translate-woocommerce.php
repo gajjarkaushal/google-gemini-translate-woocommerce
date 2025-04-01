@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Google Gemini Translate for WooCommerce
- * Description: WooCommerce product titles and image alt tags using Google Gemini AI.
+ * Plugin Name: DeepSeek Translate for WooCommerce
+ * Description: WooCommerce product titles and image alt tags using DeepSeek AI.
  * Author URI: https://gajjarkaushal.com
  * Version: 1.2
  * Author: Kaushal Gajjar
@@ -60,7 +60,7 @@ class GoogleGeminiTranslate {
      */
     public function add_settings_page() {
         add_options_page(
-            'Google Gemini Translate',
+            'DeepSeek Translate',
             'Gemini Translate',
             'manage_options',
             'ggt-settings',
@@ -75,7 +75,7 @@ class GoogleGeminiTranslate {
     public function render_settings_page() {
         ?>
         <div class="wrap">
-            <h1>Google Gemini Translate Settings</h1>
+            <h1>DeepSeek Translate Settings</h1>
             <form method="post" action="options.php">
                 <?php
                 settings_fields('ggt_settings_group');
@@ -108,6 +108,10 @@ class GoogleGeminiTranslate {
                     }
 
                     $error_message = get_option('gemini_translate_error');
+                    if ($error_message) {
+                        echo '<tr><td style="color:red;"><b>' . __('Last Error', 'ggt') . '</b></td><td style="color:red;">' . esc_html($error_message) . '</td></tr>';
+                    }
+                    $error_message = get_option('deepseek_translate_error');
                     if ($error_message) {
                         echo '<tr><td style="color:red;"><b>' . __('Last Error', 'ggt') . '</b></td><td style="color:red;">' . esc_html($error_message) . '</td></tr>';
                     }
@@ -147,7 +151,7 @@ class GoogleGeminiTranslate {
 
         add_settings_field(
             'ggt_api_key',
-            'Google Gemini API Key',
+            'DeepSeek API Key',
             [$this, 'api_key_callback'],
             'ggt-settings',
             'ggt_main_section'
@@ -162,7 +166,7 @@ class GoogleGeminiTranslate {
         );
     }
     /**
-     * Outputs the input field for the Google Gemini API Key.
+     * Outputs the input field for the DeepSeek API Key.
      *
      * Retrieves the current API key from the WordPress options and displays it
      * in an input field on the settings page, allowing the user to update the key.
@@ -206,7 +210,7 @@ class GoogleGeminiTranslate {
         echo '</select>';
     }
     /**
-     * Translate a given text to the target language using the Google Gemini AI
+     * Translate a given text to the target language using the DeepSeek AI
      *
      * @param string $text The text to translate
      * @return string The translated text or the original text if translation fails
@@ -303,14 +307,13 @@ class GoogleGeminiTranslate {
             ],
             'timeout' => 20 // Increase timeout to 20 seconds
         ]);
-    
+        
         if (is_wp_error($response)) {
             update_option('deepseek_translate_error', 'Request failed: ' . $response->get_error_message());
             return $text;
         }
     
         $body = wp_remote_retrieve_body($response);
-        
         if (!$body) {
             update_option('deepseek_translate_error', 'Empty response from API.');
             return $text;
@@ -379,7 +382,7 @@ class GoogleGeminiTranslate {
      * Process a batch of WooCommerce products for translation
      *
      * This function is designed to be called by a cron job to translate
-     * WooCommerce product titles and alt tags using Google Gemini Translate
+     * WooCommerce product titles and alt tags using DeepSeek Translate
      *
      * @since 1.0
      * @return void
@@ -403,10 +406,10 @@ class GoogleGeminiTranslate {
                     'key'     => '_translated_gemini',
                     'compare' => 'NOT EXISTS',
                 ],
-                [
-                    'key'     => '_telforceid',
-                    'compare' => 'EXISTS',
-                ],
+                // [
+                //     'key'     => '_telforceid',
+                //     'compare' => 'EXISTS',
+                // ],
             ],
         ];
 
