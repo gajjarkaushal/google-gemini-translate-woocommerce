@@ -45,6 +45,8 @@ class GoogleGeminiTranslate {
         add_action('init', [$this, 'schedule_translation_cron']);
         add_action('translate_products_batch', [$this, 'process_translation_batch']);
         add_filter('cron_schedules', [$this,'ggt_cron_schedules']);
+        // add_action('init', [$this, 'process_translation_batch']);
+
         // add_action('init', function(){
         //     echo $this->translate('Hey, How was your morning?');
         //     die;
@@ -61,7 +63,7 @@ class GoogleGeminiTranslate {
     public function add_settings_page() {
         add_options_page(
             'DeepSeek Translate',
-            'Gemini Translate',
+            'DeepSeek Translate',
             'manage_options',
             'ggt-settings',
             [$this, 'render_settings_page']
@@ -164,6 +166,48 @@ class GoogleGeminiTranslate {
             'ggt-settings',
             'ggt_main_section'
         );
+
+        
+        register_setting('ggt_settings_group', 'ggt_allow_img_alt_tag');
+        
+        add_settings_field(
+            'ggt_allow_img_alt_tag',
+            'Allow Image alt tag',
+            [$this, 'allow_img_alt_tag_callback'],
+            'ggt-settings',
+            'ggt_main_section'
+        );
+
+        register_setting('ggt_settings_group', 'ggt_translate_start_time');
+        register_setting('ggt_settings_group', 'ggt_translate_end_time');
+
+        add_settings_field(
+            'ggt_translate_start_time',
+            'Translate Start Time',
+            function() {
+                $start_time = get_option('ggt_translate_start_time', '00:00');
+                echo '<input type="time" name="ggt_translate_start_time" value="' . esc_attr($start_time) . '">';
+            },
+            'ggt-settings',
+            'ggt_main_section'
+        );
+
+        add_settings_field(
+            'ggt_translate_end_time',
+            'Translate End Time',
+            function() {
+                $end_time = get_option('ggt_translate_end_time', '23:59');
+                echo '<input type="time" name="ggt_translate_end_time" value="' . esc_attr($end_time) . '">';
+            },
+            'ggt-settings',
+            'ggt_main_section'
+        );
+
+    }
+    
+    public function allow_img_alt_tag_callback() {
+        $allow_img_alt_tag = get_option('ggt_allow_img_alt_tag', 0);
+        echo '<input type="checkbox" name="ggt_allow_img_alt_tag" value="1" ' . checked(1, $allow_img_alt_tag, false) . '/>';
     }
     /**
      * Outputs the input field for the DeepSeek API Key.
@@ -395,6 +439,23 @@ class GoogleGeminiTranslate {
         if (!class_exists('GoogleGeminiTranslate')) {
             return;
         }
+        $current_time = time();
+        $start_time = get_option('ggt_translate_start_time');
+        if(empty($start_time)){
+            $start_time = strtotime(date('Y-m-d') . ' 16:30:00');
+        }else{
+            $start_time = strtotime(date('Y-m-d') . ' '.$start_time.':00');
+        }
+        
+        $end_time = get_option('ggt_translate_end_time'); // Add 24 hours to handle midnight crossing
+        if(empty($end_time)){
+            $end_time = strtotime(date('Y-m-d') . ' 00:30:00');
+        }else{
+            $end_time = strtotime(date('Y-m-d') . ' '.$end_time.':00');
+        }
+        if ( $current_time < $start_time || $current_time > $end_time ) {
+            return;
+        }
 
         $batch_size = 10;
         $args = [
@@ -430,25 +491,29 @@ class GoogleGeminiTranslate {
 
             error_log("Translated Product: {$original_title} -> {$translated_title}");
 
-            $thumbnail_id = get_post_thumbnail_id($post_id);
-            if ($thumbnail_id) {
-                $alt_text = get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true);
-                if (!empty($alt_text)) {
-                    $translated_alt = $this->translate($alt_text);
-                    update_post_meta($thumbnail_id, '_wp_attachment_image_alt', $translated_alt);
-                    error_log("Translated Featured Image Alt: {$alt_text} -> {$translated_alt}");
-                }
-            }
+            $allow_img_alt_translation = get_option('allow_img_alt_translation', true);
 
-            $gallery_image_ids = get_post_meta($post_id, '_product_image_gallery', true);
-            if (!empty($gallery_image_ids)) {
-                $gallery_ids = explode(',', $gallery_image_ids);
-                foreach ($gallery_ids as $image_id) {
-                    $gallery_alt_text = get_post_meta($image_id, '_wp_attachment_image_alt', true);
-                    if (!empty($gallery_alt_text)) {
-                        $translated_gallery_alt = $this->translate($gallery_alt_text);
-                        update_post_meta($image_id, '_wp_attachment_image_alt', $translated_gallery_alt);
-                        error_log("Translated Gallery Image Alt: {$gallery_alt_text} -> {$translated_gallery_alt}");
+            if ($allow_img_alt_translation) {
+                $thumbnail_id = get_post_thumbnail_id($post_id);
+                if ($thumbnail_id) {
+                    $alt_text = get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true);
+                    if (!empty($alt_text)) {
+                        $translated_alt = $this->translate($alt_text);
+                        update_post_meta($thumbnail_id, '_wp_attachment_image_alt', $translated_alt);
+                        error_log("Translated Featured Image Alt: {$alt_text} -> {$translated_alt}");
+                    }
+                }
+
+                $gallery_image_ids = get_post_meta($post_id, '_product_image_gallery', true);
+                if (!empty($gallery_image_ids)) {
+                    $gallery_ids = explode(',', $gallery_image_ids);
+                    foreach ($gallery_ids as $image_id) {
+                        $gallery_alt_text = get_post_meta($image_id, '_wp_attachment_image_alt', true);
+                        if (!empty($gallery_alt_text)) {
+                            $translated_gallery_alt = $this->translate($gallery_alt_text);
+                            update_post_meta($image_id, '_wp_attachment_image_alt', $translated_gallery_alt);
+                            error_log("Translated Gallery Image Alt: {$gallery_alt_text} -> {$translated_gallery_alt}");
+                        }
                     }
                 }
             }
